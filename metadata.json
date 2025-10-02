@@ -1,5 +1,5 @@
 {
-  "name": "Scroll Reel: GSAP Text Animation",
-  "description": "A React web application demonstrating a scroll-triggered typographic animation where jumbled letters coalesce into stacked phrases using GSAP and Tailwind CSS.",
+  "name": "Scroll Reel Framer Component",
+  "description": "A self-contained Framer component demonstrating a scroll-triggered typographic animation. Built with React, GSAP, and Framer property controls.",
   "requestFramePermissions": []
 }

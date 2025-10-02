@@ -1,18 +1,79 @@
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import SlotMachineText from './components/SlotMachineText';
 
 // Tell TypeScript that gsap and ScrollTrigger are global variables
 declare const gsap: any;
 declare const ScrollTrigger: any;
 
-const App: React.FC = () => {
+// This value is used by both SlotMachineText and the GSAP timeline
+const REEL_LENGTH = 1;
+
+// --- Merged SlotMachineText component ---
+// This is now a local component within the same file.
+interface SlotMachineTextProps {
+  text: string;
+  className?: string;
+  animatedChars: boolean[];
+}
+
+const SlotMachineText: React.FC<SlotMachineTextProps> = ({ text, className, animatedChars }) => {
+  return (
+    <h1 className={`flex text-5xl md:text-7xl lg:text-9xl font-black uppercase tracking-tighter ${className}`} aria-label={text}>
+      {text.split('').map((char, index) => {
+        if (char === ' ') {
+          // A wider space for visual balance
+          return <span key={index} className="whitespace-pre w-4 md:w-6 lg:w-8"> </span>;
+        }
+        
+        // Use the prop to decide if this character should have the reel animation
+        const shouldAnimate = animatedChars[index];
+
+        if (!shouldAnimate) {
+            // If not animating, render a static character.
+            // We keep it in a container to ensure consistent height and alignment.
+            return (
+                <div key={index} className="h-[1em] leading-[1em]">
+                    <span aria-hidden="true">{char}</span>
+                </div>
+            )
+        }
+
+        // Create an array filled with the *same* character for a clean slide effect
+        const reelChars = Array.from({ length: REEL_LENGTH + 1 }, () => char);
+
+        return (
+          // This div is the "viewport" for our reel, masking the overflow
+          <div key={index} className="h-[1em] leading-[1em] overflow-hidden">
+            {/* This div is the "reel" that will animate vertically */}
+            <div className="char-reel flex flex-col items-center justify-center">
+              {reelChars.map((reelChar, i) => (
+                <span key={i} className="char-reel-item" aria-hidden="true">
+                  {reelChar}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </h1>
+  );
+};
+
+
+// --- Main component Clarity ---
+// This component now encapsulates all logic and state.
+// It follows the pattern where props trigger animation re-initialization.
+
+interface ClarityProps {
+    phrases?: string[];
+}
+
+export default function Clarity({ phrases = ["Learn it", "Tweak it", "Use it"] }: ClarityProps) {
   const appRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   
-  const phrases = ["Learn it", "Tweak it", "Use it"];
-
-  // Memoize the calculation of which characters to animate so it only runs once.
+  // Memoize the calculation of which characters to animate.
+  // This will re-run only when the `phrases` prop changes.
   const animatedCharsMap = useMemo(() => {
     const animationMap = phrases.map(p => p.split('').map(() => false));
 
@@ -70,9 +131,11 @@ const App: React.FC = () => {
     });
 
     return animationMap;
-  }, []);
+  }, [phrases]);
 
 
+  // useEffect for setting up and tearing down GSAP animations.
+  // It re-runs whenever the animated characters map changes, which is driven by the `phrases` prop.
   useEffect(() => {
     if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') {
         console.error("GSAP or ScrollTrigger not loaded from CDN.");
@@ -81,31 +144,23 @@ const App: React.FC = () => {
 
     gsap.registerPlugin(ScrollTrigger);
     
+    // GSAP context for safe cleanup
     const ctx = gsap.context(() => {
-        // This value MUST match REEL_LENGTH in SlotMachineText.tsx
-        const REEL_LENGTH = 1;
         const reels = gsap.utils.toArray('.char-reel');
+        if (reels.length === 0) return; // Don't create a timeline if there's nothing to animate
         
         const tl = gsap.timeline({
             scrollTrigger: {
                 trigger: triggerRef.current,
-                // Creates a small, precise trigger area in the middle of the screen.
-                // The animation will start when the center of the text block enters this zone.
-                // NOTE: The start value must be smaller than the end value for correct trigger behavior.
-                start: 'center 45%', // Start when center of trigger hits 45% from the top of viewport
-                end: 'center 55%',   // End when center of trigger hits 55% from the top of viewport
-                // 'play': Plays the animation when entering the zone from the bottom.
-                // 'none': Does nothing when leaving the zone at the top (scrolling down).
-                // 'none': Does nothing when re-entering the zone from the top (scrolling up).
-                // 'reverse': Reverses the animation when leaving the zone at the bottom (scrolling up).
+                start: 'center 45%',
+                end: 'center 55%',
                 toggleActions: 'play none none reverse',
-                // For debugging, uncomment the line below to see the trigger zone.
-                markers: true,
+                // For debugging, you can enable markers:
+                // markers: true,
             }
         });
 
         // Animate the reels scrolling up to reveal the final character.
-        // We move them up by the height of REEL_LENGTH characters.
         tl.to(reels, {
             yPercent: -100 * (REEL_LENGTH / (REEL_LENGTH + 1)),
             ease: 'power2.inOut',
@@ -118,15 +173,17 @@ const App: React.FC = () => {
 
     }, appRef);
     
-    return () => ctx.revert(); // Cleanup GSAP animations on component unmount
-  }, []);
+    return () => ctx.revert(); // Cleanup GSAP animations and ScrollTriggers on re-render or unmount
+  }, [animatedCharsMap]);
 
+  // The request to include index.html as JSX is interpreted as rendering the main app content.
+  // A React component cannot and should not render the entire <html> structure.
   return (
     <div ref={appRef} className="bg-black text-white min-h-screen font-sans antialiased overflow-hidden">
         <section ref={triggerRef} className="h-screen flex flex-col items-center justify-center text-center space-y-4">
             {phrases.map((phrase, index) => (
                 <SlotMachineText
-                    key={index}
+                    key={phrase + index}
                     text={phrase}
                     animatedChars={animatedCharsMap[index]}
                 />
@@ -139,6 +196,4 @@ const App: React.FC = () => {
         </section>
     </div>
   );
-};
-
-export default App;
+}
