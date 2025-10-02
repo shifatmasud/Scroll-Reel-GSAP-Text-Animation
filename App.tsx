@@ -1,3 +1,4 @@
+
 import React, { useEffect, useMemo, useRef } from 'react';
 import SlotMachineText from './components/SlotMachineText';
 
@@ -10,48 +11,62 @@ const App: React.FC = () => {
   const triggerRef = useRef<HTMLDivElement>(null);
   
   const phrases = ["Learn it", "Tweak it", "Use it"];
-  const TOTAL_ANIMATED_CHARS = 8;
 
   // Memoize the calculation of which characters to animate so it only runs once.
   const animatedCharsMap = useMemo(() => {
-    // Flatten all non-space characters into a single array with their coordinates
-    const allCharPositions: { phraseIndex: number; charIndex: number }[] = [];
-    phrases.forEach((phrase, phraseIndex) => {
-      phrase.split('').forEach((char, charIndex) => {
-        if (char !== ' ') {
-          allCharPositions.push({ phraseIndex, charIndex });
-        }
-      });
-    });
-
-    // Shuffle the positions for random selection
-    const shuffledPositions = allCharPositions.sort(() => 0.5 - Math.random());
-    const positionsToAnimate: { phraseIndex: number; charIndex: number }[] = [];
-
-    // Select characters, ensuring no two are adjacent
-    for (const candidate of shuffledPositions) {
-      if (positionsToAnimate.length >= TOTAL_ANIMATED_CHARS) {
-        break;
-      }
-      
-      let isAdjacent = false;
-      for (const selected of positionsToAnimate) {
-        // Check if they are in the same phrase and their indices are consecutive
-        if (candidate.phraseIndex === selected.phraseIndex && Math.abs(candidate.charIndex - selected.charIndex) === 1) {
-          isAdjacent = true;
-          break;
-        }
-      }
-
-      if (!isAdjacent) {
-        positionsToAnimate.push(candidate);
-      }
-    }
-
-    // Create a 2D boolean map for easy lookup in the render method
     const animationMap = phrases.map(p => p.split('').map(() => false));
-    positionsToAnimate.forEach(({ phraseIndex, charIndex }) => {
-      animationMap[phraseIndex][charIndex] = true;
+
+    phrases.forEach((phrase, phraseIndex) => {
+        // Get original indices of all characters that are not spaces
+        const letterIndices = phrase
+            .split('')
+            .map((char, index) => (char !== ' ' ? index : -1))
+            .filter(index => index !== -1);
+        
+        if (letterIndices.length === 0) return; // Skip if no letters in phrase
+
+        // Determine possible odd counts for this specific phrase
+        const possibleCounts = [1, 3, 5, 7, 9].filter(count => count <= letterIndices.length);
+        if (possibleCounts.length === 0) {
+            possibleCounts.push(1); // Default to 1 if the phrase is very short
+        }
+        
+        // Select a random odd number of characters to animate for this line
+        const targetAnimatedCount = possibleCounts[Math.floor(Math.random() * possibleCounts.length)];
+
+        // Shuffle the indices for random selection
+        const shuffledIndices = [...letterIndices].sort(() => 0.5 - Math.random());
+        const selectedIndices: number[] = [];
+
+        // Select characters, ensuring at least one static letter is between them
+        for (const candidateIndex of shuffledIndices) {
+            if (selectedIndices.length >= targetAnimatedCount) {
+                break;
+            }
+            
+            let isTooClose = false;
+            for (const selectedIndex of selectedIndices) {
+                const start = Math.min(candidateIndex, selectedIndex);
+                const end = Math.max(candidateIndex, selectedIndex);
+                const inBetween = phrase.substring(start + 1, end);
+                
+                // If there are no actual letters in the space between the two characters,
+                // they are considered too close.
+                if (inBetween.trim().length === 0) {
+                    isTooClose = true;
+                    break;
+                }
+            }
+
+            if (!isTooClose) {
+                selectedIndices.push(candidateIndex);
+            }
+        }
+
+        // Populate the animation map for the current phrase
+        selectedIndices.forEach(charIndex => {
+            animationMap[phraseIndex][charIndex] = true;
+        });
     });
 
     return animationMap;
@@ -96,7 +111,7 @@ const App: React.FC = () => {
             ease: 'power2.inOut',
             duration: 1,
             stagger: {
-                amount: 0.4,
+                amount: 0.6,
                 from: 'random'
             }
         });
